@@ -150,6 +150,15 @@ int main(int argc, char **argv) {
     // get the elf header from the file
     const auto& header = (*reinterpret_cast<elf::header*>(raw.data()));
 
+    // check if we have at least 2 sections in the header. 
+    // One for the null entry and at least one for the data
+    // section
+    if (header.e_shnum < 2) {
+        std::cout << "Error: invalid elf file (not enough sections)" << std::endl;
+
+        return -1;
+    }
+
     // check if the section offset is within the range of the 
     // file (should have at least 2 sections. 1 for the null 
     // entry and another with actual data)
