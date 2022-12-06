@@ -159,10 +159,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // check if the section offset is within the range of the 
-    // file (should have at least 2 sections. 1 for the null 
-    // entry and another with actual data)
-    if (raw.size() < (header.e_shoff + (2 * sizeof(elf::sector_header)))) {
+    // check if all the sections fit into the raw file
+    if (raw.size() < (header.e_shoff + (header.e_shnum * sizeof(elf::sector_header)))) {
         std::cout << "Error: invalid elf file (file to small, sections)" << std::endl;
 
         return -1;
