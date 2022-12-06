@@ -171,9 +171,27 @@ int main(int argc, char **argv) {
     // create a pointer to the section array in the file
     const auto *const sections = reinterpret_cast<elf::sector_header*>(raw.data() + header.e_shoff);
 
-    // go to the first section. (section 0 is a null entry. All 
-    // items are 0 so we should skip this)
-    const auto& vectors = sections[1];
+    // base address for now
+    const uint32_t base_address = 0x00;
+
+    // search for the section with the rane we need. (section 
+    // 0 is a null entry. All items are 0 so we should skip this)
+    const auto it = std::find_if(sections + 1, sections + header.e_shnum, [] (const auto& h) {
+        // check if the base address is within the current 
+        // section. (and check if the size at least fits 8 
+        // words)
+        return ((base_address >= h.sh_addr) && ((base_address + (8 * sizeof(uint32_t))) < (h.sh_addr + h.sh_size)));
+    });
+
+    // check if we have found the section we should use
+    if (it == (sections + header.e_shnum)) {
+        std::cout << "Error: base address not in sections" << std::endl;
+
+        return -1;
+    }
+
+    // get a reference to the vector section
+    const auto& vectors = *it;
 
     // check if the vector section is valid
     if (static_cast<elf::type>(vectors.sh_type) != elf::type::progbits) {
@@ -183,7 +201,7 @@ int main(int argc, char **argv) {
     }
 
     // check if the section is big enough to fit the section data + 8 words
-    if (raw.size() < vectors.sh_offset + (8 * sizeof(uint32_t))) {
+    if (raw.size() < (vectors.sh_offset + (8 * sizeof(uint32_t)))) {
         std::cout << "Error: invalid elf file (file to small, vectors)" << std::endl;
 
         return -1;
