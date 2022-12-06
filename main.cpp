@@ -123,6 +123,13 @@ int main(int argc, char **argv) {
     // get the raw data of the file
     auto raw = get_raw_file(argv[1]);
 
+    // check if we have data
+    if (!raw.size()) {
+        std::cout << "Error: could not open file" << std::endl;
+
+        return -1;
+    }
+
     // elf signature for comparing to the raw data
     const std::array<uint8_t, 4> elf_signature = {0x7f, 'E', 'L', 'F'};
 
