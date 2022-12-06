@@ -5,6 +5,7 @@
 #include <vector>
 #include <array>
 #include <iomanip>
+#include <cctype>
 
 namespace elf {
     // size of the e_ident
@@ -130,6 +131,44 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // base address for now
+    uint32_t base_address = 0x00;
+
+    // check if we have another parameter
+    if (argc >= 4) {
+        // get the address parameter
+        auto keyword = std::string(argv[2]);
+
+        // convert it to lower case
+        for (auto& c: keyword) {
+            c = std::toupper(c);
+        }
+
+        // check if we have found the keyword
+        if (keyword.find("BASEADDRESS") == std::string::npos) {
+            std::cout << "Error: invalid address parameter (no BASEADDRESS)" << std::endl;
+
+            return -1;
+        }
+
+        // get the address parameter
+        auto address = std::string(argv[3]);
+
+        // check if we have a hex or a decimal value
+        if (address[0] == '0' && tolower(address[1]) == 'x') {
+            // get the base address from the parameter in hex base 16
+            base_address = std::stoul(address, nullptr, 16);
+        }
+        else {
+            // get the base address from the parameter as decimal base 10
+            base_address = std::stoul(address, nullptr, 10);
+        }
+
+        // notify the user we are using a custom base address
+        std::cout << "Using base address: 0x" << std::setfill('0') << std::hex 
+                  << std::setw(8) << base_address << std::endl;
+    }
+
     // elf signature for comparing to the raw data
     const std::array<uint8_t, 4> elf_signature = {0x7f, 'E', 'L', 'F'};
 
@@ -169,9 +208,24 @@ int main(int argc, char **argv) {
     // create a pointer to the section array in the file
     const auto *const sections = reinterpret_cast<elf::sector_header*>(raw.data() + header.e_shoff);
 
-    // go to the first section. (section 0 is a null entry. All 
-    // items are 0 so we should skip this)
-    const auto& vectors = sections[1];
+    // search for the section with the rane we need. (section 
+    // 0 is a null entry. All items are 0 so we should skip this)
+    const auto it = std::find_if(sections + 1, sections + header.e_shnum, [&base_address] (const auto& h) {
+        // check if the base address is within the current 
+        // section. (and check if the size at least fits 8 
+        // words)
+        return ((base_address >= h.sh_addr) && ((base_address + (8 * sizeof(uint32_t))) < (h.sh_addr + h.sh_size)));
+    });
+
+    // check if we have found the section we should use
+    if (it == (sections + header.e_shnum)) {
+        std::cout << "Error: base address not in sections" << std::endl;
+
+        return -1;
+    }
+
+    // get a reference to the vector section
+    const auto& vectors = *it;
 
     // check if the vector section is valid
     if (static_cast<elf::type>(vectors.sh_type) != elf::type::progbits) {
@@ -181,7 +235,7 @@ int main(int argc, char **argv) {
     }
 
     // check if the section is big enough to fit the section data + 8 words
-    if (raw.size() < vectors.sh_offset + (8 * sizeof(uint32_t))) {
+    if (raw.size() < (vectors.sh_offset + (8 * sizeof(uint32_t)))) {
         std::cout << "Error: invalid elf file (file to small, vectors)" << std::endl;
 
         return -1;
@@ -193,7 +247,7 @@ int main(int argc, char **argv) {
     // get the data for the checksum
     for (uint32_t i = 0; i < crc_data.size(); i++) {
         // get the offset for the data
-        const uint8_t *const ptr = raw.data() + vectors.sh_offset + (i * sizeof(uint32_t));
+        const uint8_t *const ptr = raw.data() + vectors.sh_offset + (base_address - vectors.sh_addr) + (i * sizeof(uint32_t));
 
         // TODO: make this configurable. Currently only for little endian
         crc_data[i] = (ptr[0] | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24));
@@ -204,9 +258,10 @@ int main(int argc, char **argv) {
 
     // set the data at the correct location
     std::cout << std::hex << "Signature over range: 0x" << std::setfill('0') << std::setw(8) 
-              << 0x0 << " - " << std::setw(8) << ((crc_data.size() - 1) * sizeof(uint32_t)) 
-              << ": " << std::setw(8) << (crc_data.size() * sizeof(uint32_t)) << " = " 
-              << std::setw(8) << crc << std::endl;
+              << base_address << " - " << std::setw(8) 
+              << base_address + ((crc_data.size() - 1) * sizeof(uint32_t)) 
+              << ": " << std::setw(8) << (base_address + (crc_data.size() * sizeof(uint32_t))) 
+              << " = " << std::setw(8) << crc << std::endl;
 
     // set the crc in the raw data
     uint8_t *const location = raw.data() + vectors.sh_offset + (7 * sizeof(uint32_t));
