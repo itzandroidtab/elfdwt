@@ -229,13 +229,13 @@ int main(int argc, char **argv) {
 
     // check if the vector section is valid
     if (static_cast<elf::type>(vectors.sh_type) != elf::type::progbits) {
-        std::cout << "Error: first section does not have the progbits flag set" << std::endl;
+        std::cout << "Error: vector section does not have the progbits flag set" << std::endl;
 
         return -1;
     }
 
     // check if the section is big enough to fit the section data + 8 words
-    if (raw.size() < (vectors.sh_offset + (8 * sizeof(uint32_t)))) {
+    if (raw.size() < (vectors.sh_offset + (base_address - vectors.sh_addr) + (8 * sizeof(uint32_t)))) {
         std::cout << "Error: invalid elf file (file to small, vectors)" << std::endl;
 
         return -1;
